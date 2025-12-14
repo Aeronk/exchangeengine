@@ -281,4 +281,76 @@ class OrderMatchingService
             'executed_at' => now(),
         ]);
     }
+
+    /**
+     * Cancel an open order
+     */
+    public function cancelOrder(Order $order): Order
+    {
+        return DB::transaction(function () use ($order) {
+            // Lock and reload order
+            $order = Order::where('id', $order->id)
+                ->lockForUpdate()
+                ->first();
+
+            // Validate order can be cancelled
+            if (!$order->isOpen()) {
+                throw new Exception('Only open orders can be cancelled. Current status: ' . $order->status);
+            }
+
+            // Release locked funds/assets
+            if ($order->side === 'buy') {
+                $this->releaseBuyerFunds($order);
+            } else {
+                $this->releaseSellerAssets($order);
+            }
+
+            // Update order status
+            $order->update(['status' => Order::STATUS_CANCELLED]);
+
+            Log::info('Order cancelled', [
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+            ]);
+
+            return $order;
+        });
+    }
+
+    /**
+     * Release buyer's locked USD funds
+     */
+    protected function releaseBuyerFunds(Order $order): void
+    {
+        $user = User::where('id', $order->user_id)->lockForUpdate()->first();
+        $user->increment('balance', $order->locked_value);
+
+        Log::info('Buyer funds released', [
+            'user_id' => $user->id,
+            'amount' => $order->locked_value,
+        ]);
+    }
+
+    /**
+     * Release seller's locked assets
+     */
+    protected function releaseSellerAssets(Order $order): void
+    {
+        $asset = Asset::where('user_id', $order->user_id)
+            ->where('symbol', $order->symbol)
+            ->lockForUpdate()
+            ->first();
+
+        if ($asset) {
+            $asset->decrement('locked_amount', $order->locked_value);
+            $asset->increment('amount', $order->locked_value);
+
+            Log::info('Seller assets released', [
+                'user_id' => $order->user_id,
+                'symbol' => $order->symbol,
+                'amount' => $order->locked_value,
+            ]);
+        }
+    }
+
 }

@@ -3,7 +3,7 @@
     <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold text-gray-800">Exchange Engine</h1>
-        <p class="text-gray-600 mt-2">Login</p>
+        <p class="text-gray-600 mt-2">Login to start trading</p>
       </div>
       
       <form @submit.prevent="handleLogin" class="space-y-4">
@@ -31,10 +31,10 @@
         
         <button 
           type="submit" 
-          :disabled="loading"
+          :disabled="auth.isLoading.value"
           class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-semibold"
         >
-          {{ loading ? 'Logging in...' : 'Login' }}
+          {{ auth.isLoading.value ? 'Logging in...' : 'Login' }}
         </button>
         
         <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -42,14 +42,13 @@
         </div>
       </form>
       
-      <!-- Demo Accounts for Assessment -->
-      <div class="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm">
-        <h3 class="text-gray-700 font-semibold mb-2">Demo Accounts (For Testing)</h3>
-        <ul class="space-y-1 text-gray-600">
-          <li><strong>Buyer:</strong> buyer@test.com / password</li>
-          <li><strong>Seller:</strong> seller@test.com / password</li>
-          <li><strong>Trader:</strong> trader@test.com / password</li>
-        </ul>
+      <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+        <p class="text-xs font-semibold text-gray-700 mb-2">Demo Accounts:</p>
+        <div class="space-y-1 text-xs text-gray-600">
+          <p><strong>Buyer:</strong> buyer@test.com / password</p>
+          <p><strong>Seller:</strong> seller@test.com / password</p>
+          <p><strong>Trader:</strong> trader@test.com / password</p>
+        </div>
       </div>
     </div>
   </div>
@@ -57,31 +56,27 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useAuth } from '../composables/useAuth'
-import { useRouter } from 'vue-router'
+import { useAuth } from '../composables/useAuth.js'
 
-const router = useRouter()
-const { login } = useAuth()
-const loading = ref(false)
-const error = ref(null)
+const emit = defineEmits(['login-success'])
 
-const form = reactive({
-  email: '',
-  password: ''
+const form = reactive({ 
+  email: '', 
+  password: '' 
 })
 
-const handleLogin = async () => {
-  loading.value = true
-  error.value = null
+const error = ref(null)
+const auth = useAuth()
 
+const handleLogin = async () => {
+  error.value = null
+  
   try {
-    await login({ email: form.email, password: form.password })
-    router.push('/')
+    await auth.login(form)
+    emit('login-success')
   } catch (err) {
-    console.error(err)
-    error.value = err.response?.data?.message || 'Login failed. Please try again.'
-  } finally {
-    loading.value = false
+    console.error('Login error:', err)
+    error.value = err.response?.data?.message || 'Login failed. Please check your credentials.'
   }
 }
 </script>

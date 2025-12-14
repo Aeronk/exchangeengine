@@ -137,6 +137,8 @@
 </template>
 
 <script setup>
+
+import api from '../api/axios.js' // Use centralized axios
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import Echo from 'laravel-echo'
@@ -157,39 +159,70 @@ const buyOrders = computed(() => orderbook.value.filter(o => o.side === 'buy').s
 const sellOrders = computed(() => orderbook.value.filter(o => o.side === 'sell').sort((a, b) => parseFloat(a.price) - parseFloat(b.price)))
 const spread = computed(() => (sellOrders.value.length && buyOrders.value.length) ? parseFloat(sellOrders.value[0].price) - parseFloat(buyOrders.value[0].price) : null)
 
-// Load data
 const loadProfile = async () => {
   try {
-    const { data } = await axios.get('/api/profile')
+    const { data } = await api.get('/profile')
     profile.balance = data.balance
     profile.assets = data.assets
-  } catch (err) { console.error(err) }
+  } catch (err) { 
+    console.error('Failed to load profile:', err) 
+  }
 }
+
 const loadOrderbook = async () => {
-  try { const { data } = await axios.get(`/api/orders?symbol=${selectedSymbol.value}`); orderbook.value = data.orders } catch (err) { console.error(err) }
+  try { 
+    const { data } = await api.get(`/orders?symbol=${selectedSymbol.value}`)
+    orderbook.value = data.orders 
+  } catch (err) { 
+    console.error('Failed to load orderbook:', err) 
+  }
 }
+
 const loadMyOrders = async () => {
-  try { const { data } = await axios.get('/api/my-orders'); myOrders.value = data.orders } catch (err) { console.error(err) }
+  try { 
+    const { data } = await api.get('/my-orders')
+    myOrders.value = data.orders 
+  } catch (err) { 
+    console.error('Failed to load my orders:', err) 
+  }
 }
+
+const cancelOrder = async (orderId) => {
+  if (!confirm('Are you sure you want to cancel this order?')) return
+  
+  try { 
+    await api.post(`/orders/${orderId}/cancel`)
+    loadAll()
+    showNotification('Order cancelled successfully') 
+  } catch (err) { 
+    alert(err.response?.data?.message || 'Failed to cancel order') 
+  }
+}
+
+const handleLogout = async () => {
+  if (!confirm('Are you sure you want to logout?')) return
+  
+  try {
+    await api.post('/logout')
+    localStorage.removeItem('token')
+    
+    if (echo.value) {
+      echo.value.disconnect()
+    }
+    
+    emit('logout')
+  } catch (err) { 
+    console.error('Logout error:', err)
+    // Force logout even if API fails
+    localStorage.removeItem('token')
+    emit('logout')
+  }
+}
+
+
 const loadAll = () => { loadProfile(); loadOrderbook(); loadMyOrders() }
 const handleOrderPlaced = () => loadAll()
 
-// Cancel order
-const cancelOrder = async (orderId) => {
-  if (!confirm('Are you sure you want to cancel this order?')) return
-  try { await axios.post(`/api/orders/${orderId}/cancel`); loadAll(); showNotification('Order cancelled successfully') } 
-  catch (err) { alert(err.response?.data?.message || 'Failed to cancel order') }
-}
-
-// Logout
-const handleLogout = async () => {
-  try {
-    await axios.post('/api/logout')
-    localStorage.removeItem('token')
-    delete axios.defaults.headers.common['Authorization']
-    emit('logout')
-  } catch (err) { console.error(err) }
-}
 
 // Notification
 const showNotification = (message) => { notification.value = message; setTimeout(() => notification.value = null, 5000) }

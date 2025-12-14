@@ -1,46 +1,40 @@
 <template>
   <div>
-    <login 
-      v-if="!isAuthenticated"
-      @login-success="handleLoginSuccess"
+    <div v-if="auth.isLoading.value" class="min-h-screen flex items-center justify-center">
+      <div class="text-xl text-gray-600">Loading...</div>
+    </div>
+    
+    <Login 
+      v-else-if="!auth.isAuthenticated.value" 
+      @login-success="handleLoginSuccess" 
     />
     
-    <dashboard 
-      v-else
-      :user="user"
-      @logout="handleLogout"
+    <Dashboard 
+      v-else 
+      :user="auth.user.value" 
+      @logout="handleLogout" 
     />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
+import { useAuth } from '../composables/useAuth.js'
 import Login from './Login.vue'
 import Dashboard from './Dashboard.vue'
-import http from '../api/http'
 
-const isAuthenticated = ref(false)
-const user = ref(null)
+const auth = useAuth()
 
-const handleLoginSuccess = async () => {
-  const { data } = await http.get('/profile') // Laravel Sanctum
-  user.value = data
-  isAuthenticated.value = true
+const handleLoginSuccess = () => {
+  // User is already set in login method, nothing to do
 }
 
 const handleLogout = async () => {
-  await http.post('/logout')
-  user.value = null
-  isAuthenticated.value = false
+  await auth.logout()
 }
 
+// Check auth status on mount
 onMounted(async () => {
-  try {
-    const { data } = await http.get('/profile')
-    user.value = data
-    isAuthenticated.value = true
-  } catch (err) {
-    isAuthenticated.value = false
-  }
+  await auth.checkAuth()
 })
 </script>

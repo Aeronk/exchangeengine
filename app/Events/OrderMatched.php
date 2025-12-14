@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Models\Trade;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
@@ -14,12 +15,15 @@ class OrderMatched
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    public $trade;
+    public $userId;
     /**
      * Create a new event instance.
      */
-    public function __construct()
+    public function __construct(Trade $trade, $userId)
     {
-        //
+        $this->trade = $trade;
+        $this->userId = $userId;
     }
 
     /**
@@ -30,7 +34,15 @@ class OrderMatched
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('channel-name'),
+            new PrivateChannel('user .' . $this->userId),
+        ];
+    }
+
+    public function broadcastWith()
+    {
+        return [
+            'trade' => $this->trade->load(['buyOrder', 'sellOrder']),
+            'message' => 'Your order has been matched!',
         ];
     }
 }

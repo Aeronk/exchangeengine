@@ -288,24 +288,20 @@ class OrderMatchingService
     public function cancelOrder(Order $order): Order
     {
         return DB::transaction(function () use ($order) {
-            // Lock and reload order
             $order = Order::where('id', $order->id)
                 ->lockForUpdate()
                 ->first();
 
-            // Validate order can be cancelled
             if (!$order->isOpen()) {
                 throw new Exception('Only open orders can be cancelled. Current status: ' . $order->status);
             }
 
-            // Release locked funds/assets
             if ($order->side === 'buy') {
                 $this->releaseBuyerFunds($order);
             } else {
                 $this->releaseSellerAssets($order);
             }
 
-            // Update order status
             $order->update(['status' => Order::STATUS_CANCELLED]);
 
             Log::info('Order cancelled', [
@@ -318,7 +314,7 @@ class OrderMatchingService
     }
 
     /**
-     * Release buyer's locked USD funds
+     * Release buyer's locked USD  funds
      */
     protected function releaseBuyerFunds(Order $order): void
     {
@@ -332,7 +328,7 @@ class OrderMatchingService
     }
 
     /**
-     * Release seller's locked assets
+     * Release sellers locked assets
      */
     protected function releaseSellerAssets(Order $order): void
     {
@@ -344,7 +340,6 @@ class OrderMatchingService
         if ($asset) {
             $asset->decrement('locked_amount', $order->locked_value);
             $asset->increment('amount', $order->locked_value);
-
             Log::info('Seller assets released', [
                 'user_id' => $order->user_id,
                 'symbol' => $order->symbol,

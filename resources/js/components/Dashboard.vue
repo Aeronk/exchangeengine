@@ -28,7 +28,10 @@
     </div>
 
     <!-- Order Form -->
-    <order-form @order-placed="handleOrderPlaced" />
+    <order-form 
+      @order-placed="handleOrderPlaced"
+      @show-notification="showNotification"
+    />
 
     <!-- Orderbook -->
     <div class="bg-white rounded-lg shadow-md p-6">
@@ -62,9 +65,60 @@
     <div class="bg-white rounded-lg shadow-md p-6">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold">My Orders</h2>
-        <button @click="loadMyOrders" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
-          Refresh
-        </button>
+        <div class="flex gap-3 items-center">
+          <!-- Filters -->
+          <select 
+            v-model="filters.symbol" 
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">All Symbols</option>
+            <option value="BTC">BTC</option>
+            <option value="ETH">ETH</option>
+          </select>
+
+          <select 
+            v-model="filters.side" 
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">All Sides</option>
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+          </select>
+
+          <select 
+            v-model="filters.status" 
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">All Status</option>
+            <option value="1">Open</option>
+            <option value="2">Filled</option>
+            <option value="3">Cancelled</option>
+          </select>
+
+          <button @click="loadMyOrders" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Volume Stats -->
+      <div v-if="filteredOrders.length > 0" class="grid grid-cols-4 gap-4 mb-4">
+        <div class="bg-blue-50 rounded-lg p-3">
+          <p class="text-xs text-blue-600 font-medium">Total Orders</p>
+          <p class="text-xl font-bold text-blue-900">{{ filteredOrders.length }}</p>
+        </div>
+        <div class="bg-green-50 rounded-lg p-3">
+          <p class="text-xs text-green-600 font-medium">Total Volume</p>
+          <p class="text-xl font-bold text-green-900">${{ formatNumber(totalVolume) }}</p>
+        </div>
+        <div class="bg-purple-50 rounded-lg p-3">
+          <p class="text-xs text-purple-600 font-medium">Open Orders</p>
+          <p class="text-xl font-bold text-purple-900">{{ openOrdersCount }}</p>
+        </div>
+        <div class="bg-orange-50 rounded-lg p-3">
+          <p class="text-xs text-orange-600 font-medium">Filled Orders</p>
+          <p class="text-xl font-bold text-orange-900">{{ filledOrdersCount }}</p>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -82,11 +136,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-if="myOrders.length === 0">
-              <td colspan="8" class="text-center py-8 text-gray-400">No orders yet</td>
+            <tr v-if="filteredOrders.length === 0">
+              <td colspan="8" class="text-center py-8 text-gray-400">No orders found</td>
             </tr>
             <tr 
-              v-for="order in myOrders" 
+              v-for="order in filteredOrders" 
               :key="order.id"
               class="border-b border-gray-100 hover:bg-gray-50 transition"
             >
@@ -138,9 +192,8 @@
 
 <script setup>
 
-import api from '../api/axios.js' // Use centralized axios
+import api from '../api/axios.js'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
 import OrderForm from './OrderForm.vue'
@@ -155,9 +208,45 @@ const myOrders = ref([])
 const notification = ref(null)
 const echo = ref(null)
 
+// Filters
+const filters = reactive({
+  symbol: '',
+  side: '',
+  status: ''
+})
+
 const buyOrders = computed(() => orderbook.value.filter(o => o.side === 'buy').sort((a, b) => parseFloat(b.price) - parseFloat(a.price)))
 const sellOrders = computed(() => orderbook.value.filter(o => o.side === 'sell').sort((a, b) => parseFloat(a.price) - parseFloat(b.price)))
 const spread = computed(() => (sellOrders.value.length && buyOrders.value.length) ? parseFloat(sellOrders.value[0].price) - parseFloat(buyOrders.value[0].price) : null)
+
+// Filtered orders
+const filteredOrders = computed(() => {
+  if (!myOrders.value || myOrders.value.length === 0) {
+    return []
+  }
+  
+  return myOrders.value.filter(order => {
+    if (filters.symbol && order.symbol !== filters.symbol) return false
+    if (filters.side && order.side !== filters.side) return false
+    if (filters.status && order.status.toString() !== filters.status) return false
+    return true
+  })
+})
+
+// Volume calculations
+const totalVolume = computed(() => {
+  return filteredOrders.value.reduce((sum, order) => {
+    return sum + (order.price * order.amount)
+  }, 0)
+})
+
+const openOrdersCount = computed(() => {
+  return filteredOrders.value.filter(o => o.status === 1).length
+})
+
+const filledOrdersCount = computed(() => {
+  return filteredOrders.value.filter(o => o.status === 2).length
+})
 
 const loadProfile = async () => {
   try {
@@ -213,47 +302,47 @@ const handleLogout = async () => {
     emit('logout')
   } catch (err) { 
     console.error('Logout error:', err)
-    // Force logout even if API fails
     localStorage.removeItem('token')
     emit('logout')
   }
 }
 
-
 const loadAll = () => { loadProfile(); loadOrderbook(); loadMyOrders() }
 const handleOrderPlaced = () => loadAll()
 
-
-// Notification
-const showNotification = (message) => { notification.value = message; setTimeout(() => notification.value = null, 5000) }
-
-// Setup real-time Echo/Pusher
-const setupEcho = () => {
-  window.Pusher = Pusher
-  echo.value = new Echo({
-    broadcaster: 'pusher',
-    key: import.meta.env.VITE_PUSHER_APP_KEY,
-    cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
-    forceTLS: true,
-    encrypted: true,
-    authEndpoint: '/broadcasting/auth',
-    auth: { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, Accept: 'application/json' } },
-  })
-  if (props.user?.id) {
-    echo.value.private(`user.${props.user.id}`).listen('OrderMatched', e => {
-      showNotification(`Trade executed at $${formatNumber(e.trade.price)} for ${formatNumber(e.trade.amount)} ${e.trade.symbol}`)
-      loadAll()
-    })
-  }
+const showNotification = (message) => { 
+  notification.value = message
+  setTimeout(() => notification.value = null, 5000) 
 }
 
-// Helpers
 const getStatusClass = status => ({ 1:'bg-blue-100 text-blue-700',2:'bg-green-100 text-green-700',3:'bg-gray-100 text-gray-700' }[status])
 const getStatusText = status => ({1:'OPEN',2:'FILLED',3:'CANCELLED'}[status])
 const formatNumber = num => num ? parseFloat(num).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:8}) : '0.00'
 const formatTime = timestamp => new Date(timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
 
-// Lifecycle
+const setupEcho = () => {
+  try {
+    window.Pusher = Pusher
+    echo.value = new Echo({
+      broadcaster: 'pusher',
+      key: import.meta.env.VITE_PUSHER_APP_KEY,
+      cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+      forceTLS: true,
+      encrypted: true,
+      authEndpoint: '/broadcasting/auth',
+      auth: { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, Accept: 'application/json' } },
+    })
+    if (props.user?.id) {
+      echo.value.private(`user.${props.user.id}`).listen('OrderMatched', e => {
+        showNotification(`Trade executed at ${formatNumber(e.trade.price)} for ${formatNumber(e.trade.amount)} ${e.trade.symbol}`)
+        loadAll()
+      })
+    }
+  } catch (err) {
+    console.log('Pusher not configured - real-time updates disabled')
+  }
+}
+
 onMounted(() => {
   loadAll()
   setupEcho()

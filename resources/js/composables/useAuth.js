@@ -70,7 +70,6 @@ export function useAuth() {
     user: readonly(user),
     isAuthenticated: readonly(isAuthenticated),
     isLoading: readonly(isLoading),
-    
     // Methods
     login,
     logout,

@@ -1,7 +1,5 @@
-<!-- resources/js/components/Dashboard.vue -->
 <template>
   <div class="min-h-screen bg-gray-50 p-6 space-y-6">
-    <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-3xl font-bold">Welcome, {{ user.name }}</h1>
       <button 
@@ -155,7 +153,6 @@ const myOrders = ref([])
 const notification = ref(null)
 const echo = ref(null)
 
-// Computed order lists
 const buyOrders = computed(() => orderbook.value.filter(o => o.side === 'buy').sort((a, b) => parseFloat(b.price) - parseFloat(a.price)))
 const sellOrders = computed(() => orderbook.value.filter(o => o.side === 'sell').sort((a, b) => parseFloat(a.price) - parseFloat(b.price)))
 const spread = computed(() => (sellOrders.value.length && buyOrders.value.length) ? parseFloat(sellOrders.value[0].price) - parseFloat(buyOrders.value[0].price) : null)
